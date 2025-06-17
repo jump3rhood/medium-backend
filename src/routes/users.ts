@@ -1,59 +1,87 @@
 import { Hono } from 'hono'
 import { sign } from 'hono/jwt'
-import { PrismaClient } from '../generated/prisma/edge'
+import { signupInput, signinInput } from '@jump3rhood/medium-common'
+import bcrypt from 'bcryptjs'
+import type { HonoEnv } from '../types/hono'
 
-type Bindings = {
-  DATABASE_URL: string
-  JWT_SECRET: string
-}
-
-type Variables = {
-  userId: string
-  prisma: PrismaClient
-}
-
-const userRouter = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+const userRouter = new Hono<HonoEnv>()
 
 userRouter.post('/signup', async (c) => {
-  // add zod validations
-  const body: {
-    name: string
-    email: string
-    password: string
-  } = await c.req.json()
+  const body = await c.req.json()
+  const parsed = signupInput.safeParse(body)
   console.log(body)
+  if (!parsed.success) {
+    return c.json(
+      {
+        message: 'Inputs are incorrect',
+        errors: parsed.error.flatten().fieldErrors,
+      },
+      411,
+    )
+  }
 
+  const { email, name, password } = parsed.data
   const prisma = c.get('prisma')
+
   try {
+    const existingUser = await prisma.user.findUnique({
+      where: {
+        email,
+      },
+    })
+
+    if (existingUser) {
+      return c.json(
+        {
+          error: 'Account with the email already exists. Sign In instead!',
+        },
+        400,
+      )
+    }
+    const hashedPassword = await bcrypt.hash(password, 10)
     const user = await prisma.user.create({
       data: {
-        name: body.name,
-        email: body.email,
-        password: body.password,
+        name,
+        email,
+        password: hashedPassword,
       },
     })
     const jwt = await sign({ id: user.id }, c.env.JWT_SECRET)
     return c.json({ jwt })
   } catch (e) {
-    c.status(403)
-    return c.json({ error: 'Error while signing up' })
+    console.log(e)
+    return c.json({ error: 'Error while signing up' }, 500)
   }
 })
+
 userRouter.post('/signin', async (c) => {
-  const prisma = c.get('prisma')
   const body = await c.req.json()
-  const user = await prisma.user.findUnique({
-    where: {
-      email: body.email,
-    },
-  })
-  if (!user) {
-    c.status(403)
-    return c.json({ error: 'user not found' })
+  const parsed = signinInput.safeParse(body)
+  if (!parsed.success) {
+    return c.json({
+      message: 'Inputs are wrong',
+      errors: parsed.error.flatten().fieldErrors,
+    })
   }
 
+  const { email, password } = parsed.data
+  const prisma = c.get('prisma')
+
+  const user = await prisma.user.findUnique({
+    where: {
+      email,
+    },
+  })
+
+  if (!user) {
+    return c.json({ error: 'Create an account first.' }, 401)
+  }
+  const isPasswordCorrect = bcrypt.compare(password, user.password)
+  if (!isPasswordCorrect) {
+    return c.json({ error: 'incorrect username/password.' }, 401)
+  }
   const jwt = await sign({ id: user.id }, c.env.JWT_SECRET)
-  return c.json(jwt)
+  return c.json({ jwt })
 })
 
 export { userRouter }

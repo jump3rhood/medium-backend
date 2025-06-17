@@ -1,21 +1,10 @@
 import { Hono } from 'hono'
-import { PrismaClient } from './generated/prisma/edge'
-
+import type { HonoEnv } from './types/hono'
 import { userRouter } from './routes/users'
 import { blogRouter } from './routes/blogs'
 import { protectedRoutesMiddleware, setPrismaClientOnReq } from './middleware'
 
-type Bindings = {
-  DATABASE_URL: string
-  JWT_SECRET: string
-}
-
-type Variables = {
-  userId: string
-  prisma: PrismaClient
-}
-
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+const app = new Hono<HonoEnv>()
 
 app.use('*', setPrismaClientOnReq)
 app.use('/api/v1/blog/*', protectedRoutesMiddleware)

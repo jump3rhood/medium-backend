@@ -1,32 +1,103 @@
 import { Hono } from 'hono'
-import { PrismaClient } from '../generated/prisma/edge'
+import type { HonoEnv } from '../types/hono'
+import { createBlogInput } from '@jump3rhood/medium-common'
+const blogRouter = new Hono<HonoEnv>()
 
-type Bindings = {
-  DATABASE_URL: string
-  JWT_SECRET: string
-}
-
-type Variables = {
-  userId: string
-  prisma: PrismaClient
-}
-
-const blogRouter = new Hono<{ Bindings: Bindings; Variables: Variables }>()
-
-blogRouter.post('/api/v1/blog', (c) => {
-  console.log(c.get('userId'))
-  return c.text('post a blog')
+blogRouter.post('', async (c) => {
+  const userId = c.get('userId')
+  const body = await c.req.json()
+  const parsed = createBlogInput.safeParse(body)
+  if (!parsed.success) {
+    return c.json(
+      {
+        message: 'Wrong inputs',
+        errors: parsed.error.flatten().fieldErrors,
+      },
+      411,
+    )
+  }
+  const { title, content } = parsed.data
+  try {
+    const post = await c.get('prisma').post.create({
+      data: {
+        title,
+        content,
+        authorId: userId,
+      },
+    })
+    c.status(201)
+    return c.json({
+      id: post.id,
+    })
+  } catch (e) {
+    console.log(e)
+    return c.json(
+      {
+        message: 'Something went wrong',
+      },
+      500,
+    )
+  }
 })
-blogRouter.put('/api/v1/blog/:id', (c) => {
-  return c.text('update a blog')
-})
-blogRouter.get('/api/v1/blog/:id', (c) => {
+
+blogRouter.put('/:id', async (c) => {
   const id = c.req.param('id')
-  console.log(id)
-  return c.text('get blog route')
+  const body = await c.req.json()
+  const parsed = createBlogInput.safeParse(body)
+  if (!parsed.success) {
+    return c.json(
+      {
+        message: 'Wrong inputs',
+        errors: parsed.error.flatten().fieldErrors,
+      },
+      411,
+    )
+  }
+  const { title, content } = parsed.data
+  const userId = c.get('userId')
+  const prisma = c.get('prisma')
+  try {
+    await prisma.post.update({
+      where: {
+        id,
+        authorId: userId,
+      },
+      data: {
+        title,
+        content,
+      },
+    })
+    return c.text('updated post')
+  } catch (e) {
+    console.log(e)
+    return c.json(
+      {
+        message: 'Something went wrong',
+      },
+      500,
+    )
+  }
 })
-blogRouter.get('/api/v1/blog/bulk', (c) => {
-  return c.text('all blogs')
+// paginate this end point
+blogRouter.get('/bulk', async (c) => {
+  const prisma = c.get('prisma')
+  console.log('reached before db call')
+  const posts = await prisma.post.findMany()
+  console.log(posts.length)
+  console.log('reached after db call')
+
+  return c.json(posts)
 })
 
-export {blogRouter}
+blogRouter.get('/:id', async (c) => {
+  const id = c.req.param('id')
+  const prisma = c.get('prisma')
+  const post = await prisma.post.findUnique({
+    where: {
+      id,
+    },
+  })
+  return c.json(post)
+})
+
+export { blogRouter }

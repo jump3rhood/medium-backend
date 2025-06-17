@@ -1,18 +1,18 @@
-import { Context, Next } from "hono"
-import { verify } from "hono/jwt"
+import { Context, Next } from 'hono'
+import { verify } from 'hono/jwt'
 import { PrismaClient } from '../generated/prisma/edge'
 import { withAccelerate } from '@prisma/extension-accelerate'
 
 const protectedRoutesMiddleware = async (c: Context, next: Next) => {
   const jwt = c.req.header('Authorization')?.substring(7)
   if (!jwt) {
-    c.status(401)
+    c.status(403)
     return c.json({ error: 'unauthorized' })
   }
   // verify the token
   const payload = await verify(jwt, c.env.JWT_SECRET)
   if (!payload) {
-    c.status(401)
+    c.status(403)
     return c.json({ error: 'unauthorized' })
   }
   c.set('userId', payload.id)
@@ -25,4 +25,4 @@ const setPrismaClientOnReq = async (c: Context, next: Next) => {
   c.set('prisma', prisma)
   await next()
 }
-export { protectedRoutesMiddleware, setPrismaClientOnReq}
+export { protectedRoutesMiddleware, setPrismaClientOnReq }
