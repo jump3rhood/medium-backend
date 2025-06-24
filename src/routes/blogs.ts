@@ -78,23 +78,41 @@ blogRouter.put('/:id', async (c) => {
     )
   }
 })
+
 // paginate this end point
 blogRouter.get('/bulk', async (c) => {
   const prisma = c.get('prisma')
   console.log('reached before db call')
-  const posts = await prisma.post.findMany()
+  const posts = await prisma.post.findMany({
+    select: {
+      content: true,
+      title: true,
+      id: true,
+      author: {
+        select: { name: true },
+      },
+    },
+  })
   console.log(posts.length)
   console.log('reached after db call')
 
   return c.json(posts)
 })
-
 blogRouter.get('/:id', async (c) => {
   const id = c.req.param('id')
+
   const prisma = c.get('prisma')
   const post = await prisma.post.findUnique({
     where: {
       id,
+    },
+    select: {
+      content: true,
+      title: true,
+      id: true,
+      author: {
+        select: { name: true },
+      },
     },
   })
   return c.json(post)

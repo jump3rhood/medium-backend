@@ -4,7 +4,8 @@ import { PrismaClient } from '../generated/prisma/edge'
 import { withAccelerate } from '@prisma/extension-accelerate'
 
 const protectedRoutesMiddleware = async (c: Context, next: Next) => {
-  const jwt = c.req.header('Authorization')?.substring(7)
+  const jwt = c.req.header('Authorization')
+  console.log(jwt)
   if (!jwt) {
     c.status(403)
     return c.json({ error: 'unauthorized' })
